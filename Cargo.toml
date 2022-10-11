@@ -2,6 +2,8 @@
 name = "monokakido"
 version = "0.1.0"
 edition = "2021"
+description = "A Rust library for parsing and interpreting the Monokakido dictionary format."
+license = "MIT"
 
 [dependencies]
 miniz_oxide = { version = "0.6", default-features = false }
