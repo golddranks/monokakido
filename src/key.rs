@@ -3,6 +3,7 @@ use std::{
     io::{Read, Seek},
     mem::size_of,
     str::from_utf8,
+    cmp::Ordering, borrow::Cow,
 };
 
 use crate::{
@@ -77,9 +78,9 @@ use abi::{FileHeader, IndexHeader};
 
 pub struct Keys {
     words: Vec<LE32>,
-    index_a: Vec<LE32>,
-    index_b: Vec<LE32>,
-    index_c: Vec<LE32>,
+    index_len: Vec<LE32>,
+    index_prefix: Vec<LE32>,
+    index_suffix: Vec<LE32>,
     index_d: Vec<LE32>,
 }
 
@@ -144,9 +145,9 @@ impl Keys {
 
         Ok(Keys {
             words,
-            index_a,
-            index_b,
-            index_c,
+            index_len: index_a,
+            index_prefix: index_b,
+            index_suffix: index_c,
             index_d,
         })
     }
@@ -163,6 +164,7 @@ impl Keys {
 
     pub(crate) fn get_word_span(&self, offset: usize) -> Result<(&str, usize), Error> {
         let words_bytes = LE32::slice_as_bytes(&self.words);
+        // TODO: add comment. What is this guarding against?
         if words_bytes.len() < offset + 2 * size_of::<LE32>() {
             return Err(Error::InvalidIndex);
         }
@@ -174,6 +176,27 @@ impl Keys {
         }
     }
 
+    pub(crate) fn cmp_key(&self, target: &str, idx: usize) -> Result<Ordering, Error> {
+        let offset = self.index_prefix[idx + 1].us() + size_of::<LE32>() + 1;
+        let words_bytes = LE32::slice_as_bytes(&self.words);
+        if words_bytes.len() < offset + target.len() + 1 {
+
+            return Err(Error::InvalidIndex); // Maybe just return Ordering::Less instead?
+        }
+        let found_tail = &words_bytes[offset..];
+        let found = &found_tail[..target.len()];
+        Ok(match found.cmp(target.as_bytes()) {
+            Ordering::Equal => if found_tail[target.len()] == b'\0'
+                {
+                    Ordering::Equal
+                } else {
+                    Ordering::Greater
+                },
+            ord => ord,
+        })
+    }
+
+
     fn get_inner(&self, index: &[LE32], idx: usize) -> Result<(&str, PageIter<'_>), Error> {
         if idx >= self.count() {
             return Err(Error::NotFound);
@@ -184,21 +207,76 @@ impl Keys {
         Ok((word, pages))
     }
 
-    pub fn get_index_a(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_a, idx)
+    pub fn get_index_len(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
+        self.get_inner(&self.index_len, idx)
     }
 
-    pub fn get_index_b(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_b, idx)
+    pub fn get_index_prefix(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
+        self.get_inner(&self.index_prefix, idx)
     }
 
-    pub fn get_index_c(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_c, idx)
+    pub fn get_index_suffix(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
+        self.get_inner(&self.index_suffix, idx)
     }
 
     pub fn get_index_d(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
         self.get_inner(&self.index_d, idx)
     }
+
+    pub fn search_exact(&self, target_key: &str) -> Result<(usize, PageIter<'_>), Error> {
+        let target_key = &to_katakana(target_key);
+        let mut high = self.count();
+        let mut low = 0;
+
+        // TODO: Revise corner cases and add tests for this binary search
+        while low <= high {
+            let mid = low + (high - low) / 2;
+
+            let cmp = self.cmp_key(target_key, mid)?;
+
+            match cmp {
+                Ordering::Less => low = mid + 1,
+                Ordering::Greater => high = mid - 1,
+                Ordering::Equal => return Ok((mid, self.get_index_prefix(mid)?.1)),
+            }
+        }
+
+        return Err(Error::NotFound);
+    }
+}
+
+fn to_katakana(input: &str) -> Cow<str> {
+    let diff = 'ア' as u32 - 'あ' as u32;
+    if let Some(pos) = input.find(|c| matches!(c, 'ぁ'..='ん')) {
+        let mut output = input[..pos].to_owned();
+        for c in input[pos..].chars() {
+            if matches!(c, 'ぁ'..='ん') {
+                output.push(char::from_u32(c as u32 + diff).unwrap());
+            } else {
+                output.push(c);
+            }
+        }
+        return Cow::Owned(output);
+    } else {
+        return Cow::Borrowed(input);
+    }
+}
+
+#[test]
+fn test_to_katakana() {
+    assert_eq!(*to_katakana(""), *"");
+    assert_eq!(*to_katakana("あ"), *"ア");
+    assert_eq!(*to_katakana("ぁ"), *"ァ");
+    assert_eq!(*to_katakana("ん"), *"ン");
+    assert_eq!(*to_katakana("っ"), *"ッ");
+    assert_eq!(*to_katakana("ア"), *"ア");
+    assert_eq!(*to_katakana("ァ"), *"ァ");
+    assert_eq!(*to_katakana("ン"), *"ン");
+    assert_eq!(*to_katakana("ッ"), *"ッ");
+    assert_eq!(*to_katakana("aアa"), *"aアa");
+    assert_eq!(*to_katakana("aァa"), *"aァa");
+    assert_eq!(*to_katakana("aンa"), *"aンa");
+    assert_eq!(*to_katakana("aッa"), *"aッa");
 }
 
 #[derive(Debug, Clone)]
@@ -216,9 +294,13 @@ impl<'a> PageIter<'a> {
         let mut tail = pages;
         for _ in 0..count {
             match tail {
+                &[1, _, ref t @ ..] => tail = t,
                 &[2, _, _, ref t @ ..] => tail = t,
                 &[4, _, _, _, ref t @ ..] => tail = t,
-                _ => return Err(Error::InvalidIndex),
+                e => {
+                    dbg!("hmm", &e[..100]);
+                    return Err(Error::InvalidIndex);
+                },
             }
         }
         let span_len = pages.len() - tail.len();
@@ -237,6 +319,7 @@ impl<'a> Iterator for PageIter<'a> {
         // so unreachable is never reached. `self.count` is also checked to correspond,
         // so overflow never happens.
         let (id, tail) = match self.span {
+            &[1, hi, ref tail @ ..] => (u32::from_be_bytes([0, 0, 0, hi]), tail),
             &[2, hi, lo, ref tail @ ..] => (u32::from_be_bytes([0, 0, hi, lo]), tail),
             &[4, hi, mid, lo, ref tail @ ..] => (u32::from_be_bytes([0, hi, mid, lo]), tail),
             &[] => return None,

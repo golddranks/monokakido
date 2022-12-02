@@ -16,6 +16,8 @@ pub(crate) struct AudioIndex {
 }
 
 mod abi {
+    use std::mem::size_of;
+
     use crate::{audio::AudioFormat, Error};
 
     #[repr(C)]
@@ -68,19 +70,28 @@ mod abi {
             idx: vec![air(0), air(1), air(3), air(6), air(10)],
             ids: "\0a\0bb\0ccc\0dddd".to_owned(),
         };
-        assert_eq!(audio_idx.get_id_at(0).unwrap(), "");
-        assert_eq!(audio_idx.get_id_at(1).unwrap(), "a");
-        assert_eq!(audio_idx.get_id_at(3).unwrap(), "bb");
-        assert_eq!(audio_idx.get_id_at(4), Err(Error::InvalidIndex));
-        assert_eq!(audio_idx.get_id_at(6).unwrap(), "ccc");
-        assert_eq!(audio_idx.get_id_at(10), Err(Error::InvalidIndex));
+
+        let diff = 8 + audio_idx.idx.len() * size_of::<AudioIdxRecord>();
+        // Fix offsets now that they are known
+        for air in audio_idx.idx.iter_mut() {
+            air.id_str_offset += diff as u32;
+        }
+
+        dbg!(&audio_idx);
+        assert_eq!(audio_idx.get_id_at(diff + 0).unwrap(), "");
+        assert_eq!(audio_idx.get_id_at(diff + 1).unwrap(), "a");
+        assert_eq!(audio_idx.get_id_at(diff + 3).unwrap(), "bb");
+        assert_eq!(audio_idx.get_id_at(diff + 4), Err(Error::InvalidIndex));
+        assert_eq!(audio_idx.get_id_at(diff + 6).unwrap(), "ccc");
+        assert_eq!(audio_idx.get_id_at(diff + 10), Err(Error::InvalidIndex));
 
         audio_idx.ids = "\0a\0bb\0ccc\0dddd\0".to_owned();
-        assert_eq!(audio_idx.get_by_id("").unwrap(), air(0));
-        assert_eq!(audio_idx.get_by_id("a").unwrap(), air(1));
-        assert_eq!(audio_idx.get_by_id("bb").unwrap(), air(3));
-        assert_eq!(audio_idx.get_by_id("ccc").unwrap(), air(6));
-        assert_eq!(audio_idx.get_by_id("dddd").unwrap(), air(10));
+        let diff = diff as u32;
+        assert_eq!(audio_idx.get_by_id("").unwrap(), air(diff + 0));
+        assert_eq!(audio_idx.get_by_id("a").unwrap(), air(diff + 1));
+        assert_eq!(audio_idx.get_by_id("bb").unwrap(), air(diff + 3));
+        assert_eq!(audio_idx.get_by_id("ccc").unwrap(), air(diff + 6));
+        assert_eq!(audio_idx.get_by_id("dddd").unwrap(), air(diff + 10));
         assert_eq!(audio_idx.get_by_id("ddd"), Err(Error::NotFound));
     }
 }
