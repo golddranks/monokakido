@@ -2,7 +2,6 @@ use miniserde::{json, Deserialize};
 use std::{
     ffi::OsStr,
     fs,
-    ops::Not,
     path::{Path, PathBuf},
 };
 
@@ -11,7 +10,7 @@ use crate::{audio::Audio, key::Keys, pages::Pages, Error};
 pub struct MonokakidoDict {
     paths: Paths,
     pub pages: Pages,
-    pub audio: Audio,
+    pub audio: Option<Audio>,
     pub keys: Keys,
 }
 
@@ -27,7 +26,7 @@ struct DSProductContents {
     dir: String,
 }
 
-pub(crate) struct Paths {
+pub struct Paths {
     base_path: PathBuf,
     name: String,
     contents_dir: String,
@@ -57,33 +56,6 @@ impl Paths {
         let mut pb = PathBuf::from(&self.base_path);
         pb.push("Contents");
         pb.push(&self.contents_dir);
-        pb.push("contents");
-        pb
-    }
-
-    pub(crate) fn audio_path(&self) -> PathBuf {
-        let mut pb = PathBuf::from(&self.base_path);
-        pb.push("Contents");
-        pb.push(&self.contents_dir);
-        pb.push("audio");
-        pb
-    }
-
-    pub(crate) fn contents_idx_path(&self) -> PathBuf {
-        let mut pb = self.contents_path();
-        pb.push("contents.idx");
-        pb
-    }
-
-    pub(crate) fn contents_map_path(&self) -> PathBuf {
-        let mut pb = self.contents_path();
-        pb.push("contents.map");
-        pb
-    }
-
-    pub(crate) fn audio_idx_path(&self) -> PathBuf {
-        let mut pb = self.audio_path();
-        pb.push("index.nidx");
         pb
     }
 
@@ -104,10 +76,12 @@ impl Paths {
 
 fn parse_dict_name(fname: &OsStr) -> Option<&str> {
     let fname = fname.to_str()?;
-    if fname.starts_with("jp.monokakido.Dictionaries.").not() {
-        return None;
+    let dict_prefix = "jp.monokakido.Dictionaries.";
+    if fname.starts_with(dict_prefix) {
+        Some(&fname[dict_prefix.len()..])
+    } else {
+        None
     }
-    Some(&fname[27..])
 }
 
 impl MonokakidoDict {
@@ -123,14 +97,23 @@ impl MonokakidoDict {
 
     pub fn open(name: &str) -> Result<Self, Error> {
         let std_path = Paths::std_dict_path(name);
-        Self::open_with_path(&std_path, name)
+        Self::open_with_path_name(&std_path, name)
     }
 
     pub fn name(&self) -> &str {
         &self.paths.name
     }
 
-    pub fn open_with_path(path: impl Into<PathBuf>, name: &str) -> Result<Self, Error> {
+    pub fn open_with_path(path: impl Into<PathBuf>) -> Result<Self, Error> {
+        let path: PathBuf = path.into();
+        let dir_name = path.file_name().ok_or(Error::FopenError)?.to_string_lossy();
+
+        let dict_name = dir_name.rsplit_once(".").ok_or(Error::FopenError)?.0;
+
+        Self::open_with_path_name(&path, dict_name)
+    }
+
+    fn open_with_path_name(path: impl Into<PathBuf>, name: &str) -> Result<Self, Error> {
         let base_path = path.into();
         let json_path = Paths::json_path(&base_path, name);
         let json = fs::read_to_string(json_path).map_err(|_| Error::NoDictJsonFound)?;

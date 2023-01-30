@@ -1,13 +1,14 @@
 use std::{
+    borrow::Cow,
+    cmp::Ordering,
     fs::File,
     io::{Read, Seek},
     mem::size_of,
     str::from_utf8,
-    cmp::Ordering, borrow::Cow,
 };
 
 use crate::{
-    abi::{TransmuteSafe, LE32},
+    abi_utils::{TransmuteSafe, LE32},
     dict::Paths,
     Error,
 };
@@ -40,7 +41,7 @@ mod abi {
             {
                 Ok(())
             } else {
-                Err(Error::Validate)
+                Err(Error::KeyFileHeaderValidate)
             }
         }
     }
@@ -59,15 +60,20 @@ mod abi {
 
     impl IndexHeader {
         pub(super) fn validate(&self, file_end: usize) -> Result<(), Error> {
+            let a = self.index_a_offset.us();
+            let b = self.index_b_offset.us();
+            let c = self.index_c_offset.us();
+            let d = self.index_d_offset.us();
+            let check_order = |l, r| l < r || r == 0;
             if self.magic1.read() == 0x04
-                && self.index_a_offset.us() < self.index_b_offset.us()
-                && self.index_b_offset.us() < self.index_c_offset.us()
-                && self.index_c_offset.us() < self.index_d_offset.us()
-                && self.index_d_offset.us() < file_end
+                && check_order(a, b)
+                && check_order(b, c)
+                && check_order(c, d)
+                && check_order(d, file_end)
             {
                 Ok(())
             } else {
-                Err(Error::Validate)
+                Err(Error::KeyIndexHeaderValidate)
             }
         }
     }
@@ -78,21 +84,26 @@ use abi::{FileHeader, IndexHeader};
 
 pub struct Keys {
     words: Vec<LE32>,
-    index_len: Vec<LE32>,
-    index_prefix: Vec<LE32>,
-    index_suffix: Vec<LE32>,
-    index_d: Vec<LE32>,
+    index_len: Option<Vec<LE32>>,
+    index_prefix: Option<Vec<LE32>>,
+    index_suffix: Option<Vec<LE32>>,
+    index_d: Option<Vec<LE32>>,
 }
 
 impl Keys {
-    fn read_vec(file: &mut File, start: usize, end: usize) -> Result<Vec<LE32>, Error> {
+    fn read_vec(file: &mut File, start: usize, end: usize) -> Result<Option<Vec<LE32>>, Error> {
+        if start == 0 || end == 0 {
+            return Ok(None);
+        }
+        // Replace this with div_ceil once it stabilizes
         let size = (end - start + size_of::<LE32>() - 1) / size_of::<LE32>();
         let mut buf = vec![LE32::default(); size];
         file.read_exact(LE32::slice_as_bytes_mut(&mut buf))?;
-        Ok(buf)
+        Ok(Some(buf))
     }
 
-    fn check_vec_len(buf: &Vec<LE32>) -> Result<(), Error> {
+    fn check_vec_len(buf: &Option<Vec<LE32>>) -> Result<(), Error> {
+        let Some(buf) = buf else { return Ok(()) };
         if buf.get(0).ok_or(Error::InvalidIndex)?.us() + 1 != buf.len() {
             return Err(Error::InvalidIndex);
         }
@@ -108,10 +119,7 @@ impl Keys {
 
         file.seek(std::io::SeekFrom::Start(hdr.words_offset.read() as u64))?;
         let words = Self::read_vec(&mut file, hdr.words_offset.us(), hdr.idx_offset.us())?;
-
-        if words.get(0).ok_or(Error::InvalidIndex)?.us() + 1 >= words.len() {
-            return Err(Error::InvalidIndex);
-        }
+        let Some(words) = words else { return Err(Error::InvalidIndex); };
 
         let file_end = file_size - hdr.idx_offset.us();
         let mut ihdr = IndexHeader::default();
@@ -177,25 +185,25 @@ impl Keys {
     }
 
     pub(crate) fn cmp_key(&self, target: &str, idx: usize) -> Result<Ordering, Error> {
-        let offset = self.index_prefix[idx + 1].us() + size_of::<LE32>() + 1;
+        let Some(index) = &self.index_len else { return Err(Error::IndexDoesntExist) };
+        let offset = index[idx + 1].us() + size_of::<LE32>() + 1;
         let words_bytes = LE32::slice_as_bytes(&self.words);
         if words_bytes.len() < offset + target.len() + 1 {
-
             return Err(Error::InvalidIndex); // Maybe just return Ordering::Less instead?
         }
         let found_tail = &words_bytes[offset..];
         let found = &found_tail[..target.len()];
         Ok(match found.cmp(target.as_bytes()) {
-            Ordering::Equal => if found_tail[target.len()] == b'\0'
-                {
+            Ordering::Equal => {
+                if found_tail[target.len()] == b'\0' {
                     Ordering::Equal
                 } else {
                     Ordering::Greater
-                },
+                }
+            }
             ord => ord,
         })
     }
-
 
     fn get_inner(&self, index: &[LE32], idx: usize) -> Result<(&str, PageIter<'_>), Error> {
         if idx >= self.count() {
@@ -208,19 +216,23 @@ impl Keys {
     }
 
     pub fn get_index_len(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_len, idx)
+        let Some(index) = &self.index_len else { return Err(Error::IndexDoesntExist) };
+        self.get_inner(index, idx)
     }
 
     pub fn get_index_prefix(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_prefix, idx)
+        let Some(index) = &self.index_prefix else { return Err(Error::IndexDoesntExist) };
+        self.get_inner(index, idx)
     }
 
     pub fn get_index_suffix(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_suffix, idx)
+        let Some(index) = &self.index_suffix else { return Err(Error::IndexDoesntExist) };
+        self.get_inner(index, idx)
     }
 
     pub fn get_index_d(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        self.get_inner(&self.index_d, idx)
+        let Some(index) = &self.index_d else { return Err(Error::IndexDoesntExist) };
+        self.get_inner(index, idx)
     }
 
     pub fn search_exact(&self, target_key: &str) -> Result<(usize, PageIter<'_>), Error> {
@@ -300,7 +312,7 @@ impl<'a> PageIter<'a> {
                 e => {
                     dbg!("hmm", &e[..100]);
                     return Err(Error::InvalidIndex);
-                },
+                }
             }
         }
         let span_len = pages.len() - tail.len();

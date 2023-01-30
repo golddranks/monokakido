@@ -1,9 +1,10 @@
-use std::{io::Error as IoError, str::Utf8Error};
+use std::{fmt::Error as FmtError, io::Error as IoError, str::Utf8Error};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     Transmute,
-    Validate,
+    KeyIndexHeaderValidate,
+    KeyFileHeaderValidate,
     FopenError,
     FstatError,
     MmapError,
@@ -17,9 +18,12 @@ pub enum Error {
     NoDictJsonFound,
     InvalidDictJson,
     IOError,
-    NoContentFilesFound,
+    MissingResourceFile,
     InvalidIndex,
     InvalidAudioFormat,
+    InvalidArg,
+    FmtError,
+    IndexDoesntExist,
 }
 
 impl From<IoError> for Error {
@@ -31,5 +35,11 @@ impl From<IoError> for Error {
 impl From<Utf8Error> for Error {
     fn from(_: Utf8Error) -> Self {
         Error::Utf8Error
+    }
+}
+
+impl From<FmtError> for Error {
+    fn from(_: FmtError) -> Self {
+        Error::FmtError
     }
 }
