@@ -27,7 +27,7 @@ impl Pages {
     pub fn get(&mut self, id: u32) -> Result<&str, Error> {
         self.init()?;
         let Some(res) = self.res.as_mut() else { unreachable!() };
-        Ok(std::str::from_utf8(res.get(id)?).map_err(|_| Error::Utf8Error)?)
+        std::str::from_utf8(res.get(id)?).map_err(|_| Error::Utf8Error)
     }
 
     pub fn get_by_idx(&mut self, idx: usize) -> Result<(u32, &str), Error> {

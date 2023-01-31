@@ -77,16 +77,12 @@ impl Paths {
 fn parse_dict_name(fname: &OsStr) -> Option<&str> {
     let fname = fname.to_str()?;
     let dict_prefix = "jp.monokakido.Dictionaries.";
-    if fname.starts_with(dict_prefix) {
-        Some(&fname[dict_prefix.len()..])
-    } else {
-        None
-    }
+    fname.strip_prefix(dict_prefix)
 }
 
 impl MonokakidoDict {
     pub fn list() -> Result<impl Iterator<Item = Result<String, Error>>, Error> {
-        let iter = fs::read_dir(&Paths::std_list_path()).map_err(|_| Error::IOError)?;
+        let iter = fs::read_dir(Paths::std_list_path()).map_err(|_| Error::IOError)?;
         Ok(iter.filter_map(|entry| {
             entry
                 .map_err(|_| Error::IOError)
@@ -97,7 +93,7 @@ impl MonokakidoDict {
 
     pub fn open(name: &str) -> Result<Self, Error> {
         let std_path = Paths::std_dict_path(name);
-        Self::open_with_path_name(&std_path, name)
+        Self::open_with_path_name(std_path, name)
     }
 
     pub fn name(&self) -> &str {
@@ -108,7 +104,7 @@ impl MonokakidoDict {
         let path: PathBuf = path.into();
         let dir_name = path.file_name().ok_or(Error::FopenError)?.to_string_lossy();
 
-        let dict_name = dir_name.rsplit_once(".").ok_or(Error::FopenError)?.0;
+        let dict_name = dir_name.rsplit_once('.').ok_or(Error::FopenError)?.0;
 
         Self::open_with_path_name(&path, dict_name)
     }

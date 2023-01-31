@@ -1,4 +1,4 @@
-use std::{path::PathBuf, ops::Range, fmt::Display};
+use std::{fmt::Display, ops::Range, path::PathBuf};
 
 use crate::{
     dict::Paths,
@@ -47,9 +47,7 @@ impl Audio {
         self.init()?;
         let Some(res) = self.res.as_mut() else { unreachable!() };
         match res {
-            AudioResource::Rsc(rsc) => {
-                rsc.get(u32::from_str_radix(id, 10).map_err(|_| Error::InvalidIndex)?)
-            }
+            AudioResource::Rsc(rsc) => rsc.get(id.parse::<u32>().map_err(|_| Error::InvalidIndex)?),
             AudioResource::Nrsc(nrsc) => nrsc.get(id),
         }
     }
@@ -61,11 +59,11 @@ impl Audio {
             AudioResource::Rsc(rsc) => {
                 let (id, page) = rsc.get_by_idx(idx)?;
                 (AudioId::Num(id), page)
-            },
+            }
             AudioResource::Nrsc(nrsc) => {
                 let (id, page) = nrsc.get_by_idx(idx)?;
                 (AudioId::Str(id), page)
-            },
+            }
         })
     }
 
@@ -82,7 +80,7 @@ impl Audio {
 #[derive(Debug)]
 pub enum AudioId<'a> {
     Str(&'a str),
-    Num(u32)
+    Num(u32),
 }
 
 impl Display for AudioId<'_> {

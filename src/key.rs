@@ -84,7 +84,7 @@ use abi::{FileHeader, IndexHeader};
 
 #[derive(Debug)]
 pub struct KeyIndex {
-    index: Option<Vec<LE32>>
+    index: Option<Vec<LE32>>,
 }
 
 pub struct Keys {
@@ -99,7 +99,9 @@ impl KeyIndex {
     fn get(&self, i: usize) -> Result<usize, Error> {
         let Some(index) = &self.index else { return Err(Error::IndexDoesntExist) };
         let i = i + 1; // Because the the index is prefixed by its legth
-        if i >= index.len() { return Err(Error::InvalidIndex) }
+        if i >= index.len() {
+            return Err(Error::InvalidIndex);
+        }
         Ok(index[i].us())
     }
 
@@ -246,7 +248,7 @@ impl Keys {
             }
         }
 
-        return Err(Error::NotFound);
+        Err(Error::NotFound)
     }
 }
 
@@ -325,13 +327,13 @@ impl<'a> Iterator for PageIter<'a> {
         // USE INVARIANT B: `self.span` is checked to conform to this shape,
         // so unreachable is never reached. `self.count` is also checked to correspond,
         // so overflow never happens.
-        let (id, tail) = match self.span {
-            &[1, hi, ref tail @ ..] => (pid([0, 0, hi], 0), tail),
-            &[2, hi, lo, ref tail @ ..] => (pid([0, hi, lo], 0), tail),
-            &[4, hi, mid, lo, ref tail @ ..] => (pid([hi, mid, lo], 0), tail),
-            &[17, hi, item, ref tail @ ..] => (pid([0, 0, hi], item), tail),
-            &[18, hi, lo, item, ref tail @ ..] => (pid([0, hi, lo], item), tail),
-            &[] => return None,
+        let (id, tail) = match *self.span {
+            [1, hi, ref tail @ ..] => (pid([0, 0, hi], 0), tail),
+            [2, hi, lo, ref tail @ ..] => (pid([0, hi, lo], 0), tail),
+            [4, hi, mid, lo, ref tail @ ..] => (pid([hi, mid, lo], 0), tail),
+            [17, hi, item, ref tail @ ..] => (pid([0, 0, hi], item), tail),
+            [18, hi, lo, item, ref tail @ ..] => (pid([0, hi, lo], item), tail),
+            [] => return None,
             _ => unreachable!(),
         };
         self.count -= 1;
@@ -346,5 +348,8 @@ pub struct PageItemId {
 }
 
 fn pid([hi, mid, lo]: [u8; 3], item: u8) -> PageItemId {
-    PageItemId { page: u32::from_be_bytes([0, hi, mid, lo]), item }
+    PageItemId {
+        page: u32::from_be_bytes([0, hi, mid, lo]),
+        item,
+    }
 }

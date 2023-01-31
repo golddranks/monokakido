@@ -102,7 +102,6 @@ fn main() {
         }
     } */
 
-
     /*
        let idx_list = [
            0,

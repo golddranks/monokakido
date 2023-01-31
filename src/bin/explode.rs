@@ -1,17 +1,17 @@
 use std::{
+    fmt::Write as _,
     fs::{create_dir_all, File},
     io::Write,
-    fmt::Write as _,
 };
 
-use monokakido::{Error, MonokakidoDict, KeyIndex, PageItemId};
+use monokakido::{Error, KeyIndex, MonokakidoDict, PageItemId};
 
 fn out_dir(dict: &MonokakidoDict) -> String {
     dict.name().to_owned() + "_out/"
 }
 
 fn write_index(dict: &MonokakidoDict, index: &KeyIndex, tsv_fname: &str) -> Result<(), Error> {
-    let mut index_tsv = File::create(out_dir(&dict) + tsv_fname)?;
+    let mut index_tsv = File::create(out_dir(dict) + tsv_fname)?;
     for i in 0..index.len() {
         let (id, pages) = dict.keys.get_idx(index, i)?;
         index_tsv.write_all(id.as_bytes())?;
@@ -66,6 +66,5 @@ fn explode() -> Result<(), Error> {
 fn main() {
     if let Err(err) = explode() {
         eprintln!("{err:?}");
-        return;
     };
 }

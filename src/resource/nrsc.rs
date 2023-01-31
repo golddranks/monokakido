@@ -177,7 +177,7 @@ impl Nrsc {
         let fname = fname.to_str()?;
         if fname.ends_with(".nrsc") {
             let secnum_end = fname.len() - ".nrsc".len();
-            u32::from_str_radix(&fname[..secnum_end], 10).ok()
+            fname[..secnum_end].parse().ok()
         } else {
             None
         }
@@ -241,7 +241,7 @@ impl Nrsc {
 
 impl NrscData {
     fn get_by_nidx_rec(&mut self, idx: NrscIdxRecord) -> Result<&[u8], Error> {
-        let file = &mut self.files[idx.fileseq() as usize];
+        let file = &mut self.files[idx.fileseq()];
 
         file.file
             .seek(SeekFrom::Start(idx.file_offset()))
@@ -265,5 +265,4 @@ impl NrscData {
             }
         }
     }
-
 }

@@ -247,7 +247,7 @@ impl Rsc {
         if fname.starts_with(rsc_name) && fname.ends_with(ext) && fname.len() > min_len {
             let seqnum_start = rsc_name.len() + 1;
             let seqnum_end = fname.len() - ext.len();
-            u32::from_str_radix(&fname[seqnum_start..seqnum_end], 10).ok()
+            fname[seqnum_start..seqnum_end].parse().ok()
         } else {
             None
         }
