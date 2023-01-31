@@ -1,4 +1,4 @@
-use std::{path::PathBuf, ops::Range};
+use std::{path::PathBuf, ops::Range, fmt::Display};
 
 use crate::{
     dict::Paths,
@@ -79,7 +79,17 @@ impl Audio {
     }
 }
 
+#[derive(Debug)]
 pub enum AudioId<'a> {
     Str(&'a str),
     Num(u32)
+}
+
+impl Display for AudioId<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Str(str) => f.write_str(str),
+            Self::Num(num) => write!(f, "{num:0>10}"),
+        }
+    }
 }

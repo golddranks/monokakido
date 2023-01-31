@@ -82,12 +82,30 @@ mod abi {
 }
 use abi::{FileHeader, IndexHeader};
 
+#[derive(Debug)]
+pub struct KeyIndex {
+    index: Option<Vec<LE32>>
+}
+
 pub struct Keys {
     words: Vec<LE32>,
-    index_len: Option<Vec<LE32>>,
-    index_prefix: Option<Vec<LE32>>,
-    index_suffix: Option<Vec<LE32>>,
-    index_d: Option<Vec<LE32>>,
+    pub index_len: KeyIndex,
+    pub index_prefix: KeyIndex,
+    pub index_suffix: KeyIndex,
+    pub index_d: KeyIndex,
+}
+
+impl KeyIndex {
+    fn get(&self, i: usize) -> Result<usize, Error> {
+        let Some(index) = &self.index else { return Err(Error::IndexDoesntExist) };
+        let i = i + 1; // Because the the index is prefixed by its legth
+        if i >= index.len() { return Err(Error::InvalidIndex) }
+        Ok(index[i].us())
+    }
+
+    pub fn len(&self) -> usize {
+        self.index.as_ref().map(|v| v.len()).unwrap_or(0) - 1
+    }
 }
 
 impl Keys {
@@ -110,7 +128,7 @@ impl Keys {
         Ok(())
     }
 
-    pub(crate) fn new(paths: &Paths) -> Result<Keys, Error> {
+    pub fn new(paths: &Paths) -> Result<Keys, Error> {
         let mut file = File::open(paths.headword_key_path())?;
         let file_size = file.metadata()?.len() as usize;
         let mut hdr = FileHeader::default();
@@ -153,16 +171,11 @@ impl Keys {
 
         Ok(Keys {
             words,
-            index_len: index_a,
-            index_prefix: index_b,
-            index_suffix: index_c,
-            index_d,
+            index_len: KeyIndex { index: index_a },
+            index_prefix: KeyIndex { index: index_b },
+            index_suffix: KeyIndex { index: index_c },
+            index_d: KeyIndex { index: index_d },
         })
-    }
-
-    pub fn count(&self) -> usize {
-        // USE INVARIANT A
-        self.words[0].us()
     }
 
     fn get_page_iter(&self, pages_offset: usize) -> Result<PageIter, Error> {
@@ -185,8 +198,7 @@ impl Keys {
     }
 
     pub(crate) fn cmp_key(&self, target: &str, idx: usize) -> Result<Ordering, Error> {
-        let Some(index) = &self.index_len else { return Err(Error::IndexDoesntExist) };
-        let offset = index[idx + 1].us() + size_of::<LE32>() + 1;
+        let offset = self.index_prefix.get(idx)? + size_of::<LE32>() + 1;
         let words_bytes = LE32::slice_as_bytes(&self.words);
         if words_bytes.len() < offset + target.len() + 1 {
             return Err(Error::InvalidIndex); // Maybe just return Ordering::Less instead?
@@ -205,39 +217,20 @@ impl Keys {
         })
     }
 
-    fn get_inner(&self, index: &[LE32], idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        if idx >= self.count() {
+    pub fn get_idx(&self, index: &KeyIndex, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
+        if idx >= index.len() {
             return Err(Error::NotFound);
         }
-        let word_offset = index[idx + 1].us();
+        // TODO: Why is this indexing ok?
+        let word_offset = index.get(idx)?;
         let (word, pages_offset) = self.get_word_span(word_offset)?;
         let pages = self.get_page_iter(pages_offset)?;
         Ok((word, pages))
     }
 
-    pub fn get_index_len(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        let Some(index) = &self.index_len else { return Err(Error::IndexDoesntExist) };
-        self.get_inner(index, idx)
-    }
-
-    pub fn get_index_prefix(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        let Some(index) = &self.index_prefix else { return Err(Error::IndexDoesntExist) };
-        self.get_inner(index, idx)
-    }
-
-    pub fn get_index_suffix(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        let Some(index) = &self.index_suffix else { return Err(Error::IndexDoesntExist) };
-        self.get_inner(index, idx)
-    }
-
-    pub fn get_index_d(&self, idx: usize) -> Result<(&str, PageIter<'_>), Error> {
-        let Some(index) = &self.index_d else { return Err(Error::IndexDoesntExist) };
-        self.get_inner(index, idx)
-    }
-
     pub fn search_exact(&self, target_key: &str) -> Result<(usize, PageIter<'_>), Error> {
         let target_key = &to_katakana(target_key);
-        let mut high = self.count();
+        let mut high = self.index_prefix.len();
         let mut low = 0;
 
         // TODO: Revise corner cases and add tests for this binary search
@@ -249,7 +242,7 @@ impl Keys {
             match cmp {
                 Ordering::Less => low = mid + 1,
                 Ordering::Greater => high = mid - 1,
-                Ordering::Equal => return Ok((mid, self.get_index_prefix(mid)?.1)),
+                Ordering::Equal => return Ok((mid, self.get_idx(&self.index_prefix, mid)?.1)),
             }
         }
 
@@ -309,8 +302,10 @@ impl<'a> PageIter<'a> {
                 &[1, _, ref t @ ..] => tail = t,
                 &[2, _, _, ref t @ ..] => tail = t,
                 &[4, _, _, _, ref t @ ..] => tail = t,
+                &[17, _, _, ref t @ ..] => tail = t,
+                &[18, _, _, _, ref t @ ..] => tail = t,
                 e => {
-                    dbg!("hmm", &e[..100]);
+                    dbg!("hmm", &e[..100]); // TODO: clean this up
                     return Err(Error::InvalidIndex);
                 }
             }
@@ -324,16 +319,18 @@ impl<'a> PageIter<'a> {
 }
 
 impl<'a> Iterator for PageIter<'a> {
-    type Item = u32;
+    type Item = PageItemId;
 
     fn next(&mut self) -> Option<Self::Item> {
         // USE INVARIANT B: `self.span` is checked to conform to this shape,
         // so unreachable is never reached. `self.count` is also checked to correspond,
         // so overflow never happens.
         let (id, tail) = match self.span {
-            &[1, hi, ref tail @ ..] => (u32::from_be_bytes([0, 0, 0, hi]), tail),
-            &[2, hi, lo, ref tail @ ..] => (u32::from_be_bytes([0, 0, hi, lo]), tail),
-            &[4, hi, mid, lo, ref tail @ ..] => (u32::from_be_bytes([0, hi, mid, lo]), tail),
+            &[1, hi, ref tail @ ..] => (pid([0, 0, hi], 0), tail),
+            &[2, hi, lo, ref tail @ ..] => (pid([0, hi, lo], 0), tail),
+            &[4, hi, mid, lo, ref tail @ ..] => (pid([hi, mid, lo], 0), tail),
+            &[17, hi, item, ref tail @ ..] => (pid([0, 0, hi], item), tail),
+            &[18, hi, lo, item, ref tail @ ..] => (pid([0, hi, lo], item), tail),
             &[] => return None,
             _ => unreachable!(),
         };
@@ -341,4 +338,13 @@ impl<'a> Iterator for PageIter<'a> {
         self.span = tail;
         Some(id)
     }
+}
+
+pub struct PageItemId {
+    pub page: u32,
+    pub item: u8,
+}
+
+fn pid([hi, mid, lo]: [u8; 3], item: u8) -> PageItemId {
+    PageItemId { page: u32::from_be_bytes([0, hi, mid, lo]), item }
 }

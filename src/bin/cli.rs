@@ -65,7 +65,7 @@ fn main() {
     match result {
         Ok((_, pages)) => {
             for id in pages {
-                let page = dict.pages.get(id).unwrap();
+                let page = dict.pages.get(id.page).unwrap();
                 println!("{page}");
                 /*
                 if let Ok(accent) = get_accents(page) {
@@ -101,7 +101,7 @@ fn main() {
             print!(" ");
         }
     } */
-    println!()
+
 
     /*
        let idx_list = [
@@ -178,6 +178,8 @@ fn main() {
            }
        }
     */
-    //let mut stdout = stdout().lock();
-    //stdout.write_all(audio).unwrap();
+    let mut audio_rsc = dict.audio.unwrap();
+    let audio = audio_rsc.get("jee").unwrap();
+    let mut stdout = stdout().lock();
+    stdout.write_all(audio).unwrap();
 }

@@ -9,5 +9,5 @@ mod resource;
 pub use audio::Audio;
 pub use dict::MonokakidoDict;
 pub use error::Error;
-pub use key::Keys;
+pub use key::{Keys, KeyIndex, PageItemId};
 pub use pages::Pages;
