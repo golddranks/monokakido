@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use monokakido::{Error, MonokakidoDict};
 
 fn print_help() {
@@ -46,6 +48,16 @@ fn list_audio(dict_name: &str, keyword: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn get_audio(dict_name: &str, id: &str) -> Result<(), Error> {
+    let id = id.strip_suffix(".aac").unwrap_or(id);
+    let mut dict = MonokakidoDict::open(dict_name)?;
+    let aac = dict.audio.as_mut().ok_or(Error::MissingAudio)?.get(id)?;
+    let mut stdout = std::io::stdout().lock();
+    // TODO: for ergonomics/failsafe, check if stdout is a TTY
+    stdout.write_all(aac)?;
+    Ok(())
+}
+
 fn list_dicts() -> Result<(), Error> {
     for dict in MonokakidoDict::list()? {
         println!("{}", dict?);
@@ -59,6 +71,13 @@ fn main() {
         Some("list_audio") => {
             if let (Some(dict_name), Some(keyword)) = (args.next(), args.next()) {
                 list_audio(&dict_name, &keyword)
+            } else {
+                Err(Error::InvalidArg)
+            }
+        }
+        Some("get_audio") => {
+            if let (Some(dict_name), Some(id)) = (args.next(), args.next()) {
+                get_audio(&dict_name, &id)
             } else {
                 Err(Error::InvalidArg)
             }
@@ -82,7 +101,7 @@ fn main() {
             print_help();
             Ok(())
         }
-        _ => Err(Error::InvalidArg),
+        _ => Err(Error::InvalidSubcommand),
     };
 
     if let Err(e) = res {

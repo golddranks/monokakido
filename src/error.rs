@@ -25,6 +25,8 @@ pub enum Error {
     FmtError,
     IndexDoesntExist,
     XmlError,
+    MissingAudio,
+    InvalidSubcommand,
 }
 
 impl From<IoError> for Error {
