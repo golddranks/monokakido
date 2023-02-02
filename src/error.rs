@@ -24,6 +24,7 @@ pub enum Error {
     InvalidArg,
     FmtError,
     IndexDoesntExist,
+    XmlError,
 }
 
 impl From<IoError> for Error {
@@ -41,5 +42,11 @@ impl From<Utf8Error> for Error {
 impl From<FmtError> for Error {
     fn from(_: FmtError) -> Self {
         Error::FmtError
+    }
+}
+
+impl From<xmlparser::Error> for Error {
+    fn from(_: xmlparser::Error) -> Self {
+        Error::XmlError
     }
 }

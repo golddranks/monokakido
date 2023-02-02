@@ -342,6 +342,7 @@ impl<'a> Iterator for PageIter<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct PageItemId {
     pub page: u32,
     pub item: u8,

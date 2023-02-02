@@ -18,7 +18,7 @@ fn write_index(dict: &MonokakidoDict, index: &KeyIndex, tsv_fname: &str) -> Resu
         for PageItemId { page, item } in pages {
             write!(&mut index_tsv, "\t{page:0>10}")?;
             if item > 0 {
-                write!(&mut index_tsv, ":{item:0>3}")?;
+                write!(&mut index_tsv, "-{item:0>3}")?;
             }
         }
         index_tsv.write_all(b"\n")?;
@@ -37,7 +37,7 @@ fn explode() -> Result<(), Error> {
     create_dir_all(&pages_dir)?;
     let mut path = String::from(&pages_dir);
     for idx in dict.pages.idx_iter()? {
-        let (id, page) = dict.pages.get_by_idx(idx)?;
+        let (id, page) = dict.pages.page_by_idx(idx)?;
         write!(&mut path, "{id:0>10}.xml")?;
         let mut file = File::create(&path)?;
         path.truncate(pages_dir.len());

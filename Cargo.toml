@@ -8,3 +8,4 @@ license = "MIT"
 [dependencies]
 miniz_oxide = { version = "0.6", default-features = false }
 miniserde = "0.1"
+xmlparser = "0.13.5"
