@@ -2,6 +2,7 @@ use core::{
     mem::{align_of, size_of},
     slice,
 };
+use std::{fs::File, io::Read};
 
 use crate::Error;
 
@@ -34,6 +35,7 @@ impl From<u32> for LE32 {
 }
 
 unsafe impl TransmuteSafe for LE32 {}
+unsafe impl TransmuteSafe for u8 {}
 
 pub(crate) unsafe trait TransmuteSafe: Default + Clone {
     fn from_buf(buf: &[u8]) -> Result<(&Self, &[u8]), Error> {
@@ -82,4 +84,15 @@ pub(crate) unsafe trait TransmuteSafe: Default + Clone {
     fn as_bytes(&self) -> &[u8] {
         Self::slice_as_bytes(slice::from_ref(self))
     }
+}
+
+pub(crate) fn read_vec<T: TransmuteSafe>(file: &mut File, start: usize, end: usize) -> Result<Option<Vec<T>>, Error> {
+    if start == 0 || end == 0 {
+        return Ok(None);
+    }
+    // Replace this with div_ceil once it stabilizes
+    let size = (end - start + size_of::<T>() - 1) / size_of::<T>();
+    let mut buf = vec![T::default(); size];
+    file.read_exact(T::slice_as_bytes_mut(&mut buf))?;
+    Ok(Some(buf))
 }

@@ -7,6 +7,7 @@ fn print_help() {
     println!("list - lists all dictionaries installed in the standard path");
     println!("list_items {{dict}} {{keyword}} - lists all items");
     println!("list_audio {{dict}} {{keyword}} - lists all audio files");
+    println!("get_audio {{dict}} {{id}} - writes an audio file to stdout");
     println!("help - this help");
 }
 

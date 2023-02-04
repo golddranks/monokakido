@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    abi_utils::{TransmuteSafe, LE32},
+    abi_utils::{TransmuteSafe, LE32, read_vec},
     dict::Paths,
     Error,
 };
@@ -59,7 +59,7 @@ mod abi {
     }
 
     impl IndexHeader {
-        pub(super) fn validate(&self, file_end: usize) -> Result<(), Error> {
+        pub(super) fn validate(&self, idx_end: usize) -> Result<(), Error> {
             let a = self.index_a_offset.us();
             let b = self.index_b_offset.us();
             let c = self.index_c_offset.us();
@@ -69,7 +69,7 @@ mod abi {
                 && check_order(a, b)
                 && check_order(b, c)
                 && check_order(c, d)
-                && check_order(d, file_end)
+                && check_order(d, idx_end)
             {
                 Ok(())
             } else {
@@ -111,17 +111,6 @@ impl KeyIndex {
 }
 
 impl Keys {
-    fn read_vec(file: &mut File, start: usize, end: usize) -> Result<Option<Vec<LE32>>, Error> {
-        if start == 0 || end == 0 {
-            return Ok(None);
-        }
-        // Replace this with div_ceil once it stabilizes
-        let size = (end - start + size_of::<LE32>() - 1) / size_of::<LE32>();
-        let mut buf = vec![LE32::default(); size];
-        file.read_exact(LE32::slice_as_bytes_mut(&mut buf))?;
-        Ok(Some(buf))
-    }
-
     fn check_vec_len(buf: &Option<Vec<LE32>>) -> Result<(), Error> {
         let Some(buf) = buf else { return Ok(()) };
         if buf.get(0).ok_or(Error::InvalidIndex)?.us() + 1 != buf.len() {
@@ -131,44 +120,44 @@ impl Keys {
     }
 
     pub fn new(paths: &Paths) -> Result<Keys, Error> {
-        let mut file = File::open(paths.headword_key_path())?;
+        let mut file = File::open(paths.key_headword_path())?;
         let file_size = file.metadata()?.len() as usize;
         let mut hdr = FileHeader::default();
         file.read_exact(hdr.as_bytes_mut())?;
         hdr.validate()?;
 
         file.seek(std::io::SeekFrom::Start(hdr.words_offset.read() as u64))?;
-        let words = Self::read_vec(&mut file, hdr.words_offset.us(), hdr.idx_offset.us())?;
+        let words = read_vec(&mut file, hdr.words_offset.us(), hdr.idx_offset.us())?;
         let Some(words) = words else { return Err(Error::InvalidIndex); };
 
-        let file_end = file_size - hdr.idx_offset.us();
+        let idx_end = file_size - hdr.idx_offset.us();
         let mut ihdr = IndexHeader::default();
         file.seek(std::io::SeekFrom::Start(hdr.idx_offset.read() as u64))?;
         file.read_exact(ihdr.as_bytes_mut())?;
-        ihdr.validate(file_end)?;
+        ihdr.validate(idx_end)?;
 
-        let index_a = Self::read_vec(
+        let index_a = read_vec(
             &mut file,
             ihdr.index_a_offset.us(),
             ihdr.index_b_offset.us(),
         )?;
         Self::check_vec_len(&index_a)?;
 
-        let index_b = Self::read_vec(
+        let index_b = read_vec(
             &mut file,
             ihdr.index_b_offset.us(),
             ihdr.index_c_offset.us(),
         )?;
         Self::check_vec_len(&index_b)?;
 
-        let index_c = Self::read_vec(
+        let index_c = read_vec(
             &mut file,
             ihdr.index_c_offset.us(),
             ihdr.index_d_offset.us(),
         )?;
         Self::check_vec_len(&index_c)?;
 
-        let index_d = Self::read_vec(&mut file, ihdr.index_d_offset.us(), file_end)?;
+        let index_d = read_vec(&mut file, ihdr.index_d_offset.us(), idx_end)?;
         Self::check_vec_len(&index_d)?;
 
         Ok(Keys {

@@ -67,9 +67,23 @@ impl Paths {
         pb
     }
 
-    pub(crate) fn headword_key_path(&self) -> PathBuf {
+    pub(crate) fn key_headword_path(&self) -> PathBuf {
         let mut pb = self.key_path();
         pb.push("headword.keystore");
+        pb
+    }
+
+    pub(crate) fn headline_path(&self) -> PathBuf {
+        let mut pb = PathBuf::from(&self.base_path);
+        pb.push("Contents");
+        pb.push(&self.contents_dir);
+        pb.push("headline");
+        pb
+    }
+
+    pub(crate) fn headline_long_path(&self) -> PathBuf {
+        let mut pb = self.headline_path();
+        pb.push("headline.headlinestore");
         pb
     }
 }
