@@ -5,12 +5,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{audio::Audio, key::Keys, pages::Pages, Error};
+use crate::{media::Media, key::Keys, pages::Pages, Error};
 
 pub struct MonokakidoDict {
     paths: Paths,
     pub pages: Pages,
-    pub audio: Option<Audio>,
+    pub audio: Option<Media>,
+    pub graphics: Option<Media>,
     pub keys: Keys,
 }
 
@@ -135,13 +136,15 @@ impl MonokakidoDict {
             contents_dir: contents.dir,
         };
         let pages = Pages::new(&paths)?;
-        let audio = Audio::new(&paths)?;
+        let audio = Media::new(&paths)?;
+        let graphics = Media::new(&paths)?;
         let keys = Keys::new(&paths)?;
 
         Ok(MonokakidoDict {
             paths,
             pages,
             audio,
+            graphics,
             keys,
         })
     }

@@ -8,22 +8,22 @@ use crate::{
 
 const RSC_NAME: &str = "audio";
 
-pub struct Audio {
+pub struct Media {
     path: PathBuf,
-    res: Option<AudioResource>,
+    res: Option<MediaResource>,
 }
 
-enum AudioResource {
+enum MediaResource {
     Rsc(Rsc),
     Nrsc(Nrsc),
 }
 
-impl Audio {
+impl Media {
     pub fn new(paths: &Paths) -> Result<Option<Self>, Error> {
         let mut path = paths.contents_path();
         path.push(RSC_NAME);
         Ok(if path.exists() {
-            Some(Audio { path, res: None })
+            Some(Media { path, res: None })
         } else {
             None
         })
@@ -35,9 +35,9 @@ impl Audio {
             let nrsc_index_exists = self.path.exists();
             self.path.pop();
             self.res = Some(if nrsc_index_exists {
-                AudioResource::Nrsc(Nrsc::new(&self.path)?)
+                MediaResource::Nrsc(Nrsc::new(&self.path)?)
             } else {
-                AudioResource::Rsc(Rsc::new(&self.path, RSC_NAME)?)
+                MediaResource::Rsc(Rsc::new(&self.path, RSC_NAME)?)
             });
         }
         Ok(())
@@ -47,22 +47,22 @@ impl Audio {
         self.init()?;
         let Some(res) = self.res.as_mut() else { unreachable!() };
         match res {
-            AudioResource::Rsc(rsc) => rsc.get(id.parse::<u32>().map_err(|_| Error::InvalidIndex)?),
-            AudioResource::Nrsc(nrsc) => nrsc.get(id),
+            MediaResource::Rsc(rsc) => rsc.get(id.parse::<u32>().map_err(|_| Error::InvalidIndex)?),
+            MediaResource::Nrsc(nrsc) => nrsc.get(id),
         }
     }
 
-    pub fn get_by_idx(&mut self, idx: usize) -> Result<(AudioId, &[u8]), Error> {
+    pub fn get_by_idx(&mut self, idx: usize) -> Result<(MediaId, &[u8]), Error> {
         self.init()?;
         let Some(res) = self.res.as_mut() else { unreachable!() };
         Ok(match res {
-            AudioResource::Rsc(rsc) => {
+            MediaResource::Rsc(rsc) => {
                 let (id, page) = rsc.get_by_idx(idx)?;
-                (AudioId::Num(id), page)
+                (MediaId::Num(id), page)
             }
-            AudioResource::Nrsc(nrsc) => {
+            MediaResource::Nrsc(nrsc) => {
                 let (id, page) = nrsc.get_by_idx(idx)?;
-                (AudioId::Str(id), page)
+                (MediaId::Str(id), page)
             }
         })
     }
@@ -71,19 +71,19 @@ impl Audio {
         self.init()?;
         let Some(res) = self.res.as_ref() else { unreachable!() };
         Ok(0..match res {
-            AudioResource::Rsc(rsc) => rsc.len(),
-            AudioResource::Nrsc(nrsc) => nrsc.len(),
+            MediaResource::Rsc(rsc) => rsc.len(),
+            MediaResource::Nrsc(nrsc) => nrsc.len(),
         })
     }
 }
 
 #[derive(Debug)]
-pub enum AudioId<'a> {
+pub enum MediaId<'a> {
     Str(&'a str),
     Num(u32),
 }
 
-impl Display for AudioId<'_> {
+impl Display for MediaId<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Str(str) => f.write_str(str),

@@ -1,5 +1,5 @@
 mod abi_utils;
-mod audio;
+mod media;
 mod dict;
 mod error;
 mod key;
@@ -7,7 +7,7 @@ mod pages;
 mod resource;
 mod headline;
 
-pub use audio::Audio;
+pub use media::Media;
 pub use dict::MonokakidoDict;
 pub use error::Error;
 pub use key::{KeyIndex, Keys, PageItemId};

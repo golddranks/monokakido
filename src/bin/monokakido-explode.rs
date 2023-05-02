@@ -33,6 +33,7 @@ fn explode() -> Result<(), Error> {
 
     let pages_dir = out_dir(&dict) + "pages/";
     let audio_dir = out_dir(&dict) + "audio/";
+    let graphics_dir = out_dir(&dict) + "graphics/";
 
     create_dir_all(&pages_dir)?;
     let mut path = String::from(&pages_dir);
@@ -53,6 +54,18 @@ fn explode() -> Result<(), Error> {
             let mut file = File::create(&path)?;
             path.truncate(audio_dir.len());
             file.write_all(audio)?;
+        }
+    }
+
+    if let Some(graphics) = &mut dict.graphics {
+        create_dir_all(&graphics_dir)?;
+        let mut path = String::from(&graphics_dir);
+        for idx in graphics.idx_iter()? {
+            let (id, graphics) = graphics.get_by_idx(idx)?;
+            write!(&mut path, "{id}")?;
+            let mut file = File::create(&path)?;
+            path.truncate(graphics_dir.len());
+            file.write_all(graphics)?;
         }
     }
 
