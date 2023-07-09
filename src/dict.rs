@@ -136,8 +136,8 @@ impl MonokakidoDict {
             contents_dir: contents.dir,
         };
         let pages = Pages::new(&paths)?;
-        let audio = Media::new(&paths)?;
-        let graphics = Media::new(&paths)?;
+        let audio = Media::new(&paths, "audio")?;
+        let graphics = Media::new(&paths, "graphics")?;
         let keys = Keys::new(&paths)?;
 
         Ok(MonokakidoDict {

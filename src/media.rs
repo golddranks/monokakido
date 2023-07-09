@@ -6,11 +6,10 @@ use crate::{
     Error,
 };
 
-const RSC_NAME: &str = "audio";
-
 pub struct Media {
     path: PathBuf,
     res: Option<MediaResource>,
+    name: String,
 }
 
 enum MediaResource {
@@ -19,11 +18,11 @@ enum MediaResource {
 }
 
 impl Media {
-    pub fn new(paths: &Paths) -> Result<Option<Self>, Error> {
+    pub fn new(paths: &Paths, rsc_name: &str) -> Result<Option<Self>, Error> {
         let mut path = paths.contents_path();
-        path.push(RSC_NAME);
+        path.push(rsc_name);
         Ok(if path.exists() {
-            Some(Media { path, res: None })
+            Some(Media { path, res: None, name: rsc_name.to_string() })
         } else {
             None
         })
@@ -37,7 +36,7 @@ impl Media {
             self.res = Some(if nrsc_index_exists {
                 MediaResource::Nrsc(Nrsc::new(&self.path)?)
             } else {
-                MediaResource::Rsc(Rsc::new(&self.path, RSC_NAME)?)
+                MediaResource::Rsc(Rsc::new(&self.path, &self.name)?)
             });
         }
         Ok(())
