@@ -21,7 +21,13 @@ impl Media {
     pub fn new(paths: &Paths, rsc_name: &str) -> Result<Option<Self>, Error> {
         let mut path = paths.contents_path();
         path.push(rsc_name);
-        Ok(if path.exists() {
+        path.push("index.nidx");
+        let nrsc_index_exists = path.exists();
+        path.pop();
+        path.push("audio.map");
+        let rsc_index_exists = path.exists();
+        path.pop();
+        Ok(if nrsc_index_exists || rsc_index_exists {
             Some(Media { path, res: None, name: rsc_name.to_string() })
         } else {
             None
